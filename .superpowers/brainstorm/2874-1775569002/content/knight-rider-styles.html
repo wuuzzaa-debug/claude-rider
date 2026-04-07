@@ -1,0 +1,202 @@
+<h2>Knight Rider Scan-Effekt — Welcher Style?</h2>
+<p class="subtitle">Der Signature-Effekt wenn Claude "denkt". Klick auf deinen Favoriten.</p>
+
+<div class="cards">
+  <div class="card" data-choice="classic" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:20px;border-radius:8px;">
+      <canvas id="canvas-classic" width="500" height="60"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>A) Classic KITT</h3>
+      <p>Originalgetreu — ein roter Punkt wandert hin und her mit langem, verblassendem Schweif. Zeitlos, sofort erkennbar.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="modern" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:20px;border-radius:8px;">
+      <canvas id="canvas-modern" width="500" height="60"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>B) Modern Glow</h3>
+      <p>Breiterer Lichtpunkt mit weichem Glow-Effekt und kurzerem Schweif. Eleganter, moderner Look. Farbe frei waehlbar.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="dual" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:20px;border-radius:8px;">
+      <canvas id="canvas-dual" width="500" height="60"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>C) Dual Scanner</h3>
+      <p>Zwei Lichtpunkte die sich entgegengesetzt bewegen und in der Mitte kreuzen. Intensiver, technischer Look.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="pulse" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#111;padding:20px;border-radius:8px;">
+      <canvas id="canvas-pulse" width="500" height="60"></canvas>
+    </div>
+    <div class="card-body">
+      <h3>D) Pulse Scanner</h3>
+      <p>Lichtpunkt mit pulsierender Intensitaet waehrend er wandert — wie ein "Herzschlag" der sich bewegt. Lebendig und organisch.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const LEDS = 25;
+const LED_W = 16;
+const LED_GAP = 4;
+const LED_H = 40;
+
+function drawLEDs(ctx, brightness) {
+  const totalW = LEDS * (LED_W + LED_GAP) - LED_GAP;
+  const offsetX = (ctx.canvas.width - totalW) / 2;
+  const offsetY = (ctx.canvas.height - LED_H) / 2;
+
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  for (let i = 0; i < LEDS; i++) {
+    const x = offsetX + i * (LED_W + LED_GAP);
+    const b = Math.max(0, Math.min(1, brightness[i]));
+
+    // Glow
+    if (b > 0.1) {
+      const glow = ctx.createRadialGradient(
+        x + LED_W/2, offsetY + LED_H/2, 2,
+        x + LED_W/2, offsetY + LED_H/2, LED_W * 1.5
+      );
+      glow.addColorStop(0, `rgba(255, ${Math.floor(30*b)}, ${Math.floor(10*b)}, ${b * 0.4})`);
+      glow.addColorStop(1, 'rgba(255, 0, 0, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - LED_W, offsetY - LED_H/2, LED_W * 3, LED_H * 2);
+    }
+
+    // LED body
+    const r = Math.floor(255 * b);
+    const g = Math.floor(20 * b);
+    const bl = Math.floor(5 * b);
+    ctx.fillStyle = b > 0.02 ? `rgb(${r},${g},${bl})` : '#1a1a1a';
+    ctx.beginPath();
+    ctx.roundRect(x, offsetY, LED_W, LED_H, 3);
+    ctx.fill();
+
+    // Specular highlight
+    if (b > 0.3) {
+      ctx.fillStyle = `rgba(255, 150, 100, ${b * 0.3})`;
+      ctx.beginPath();
+      ctx.roundRect(x + 2, offsetY + 2, LED_W - 4, LED_H * 0.3, 2);
+      ctx.fill();
+    }
+  }
+}
+
+// Classic KITT
+(function() {
+  const canvas = document.getElementById('canvas-classic');
+  const ctx = canvas.getContext('2d');
+  let pos = 0;
+  let dir = 1;
+  const speed = 0.06;
+  const tailLen = 8;
+
+  function frame() {
+    pos += speed * dir;
+    if (pos >= LEDS - 1) { pos = LEDS - 1; dir = -1; }
+    if (pos <= 0) { pos = 0; dir = 1; }
+
+    const brightness = new Array(LEDS).fill(0);
+    for (let i = 0; i < LEDS; i++) {
+      const dist = Math.abs(i - pos);
+      if (dist < 1) brightness[i] = 1.0 - dist * 0.3;
+      else if (dist < tailLen) brightness[i] = Math.pow(1.0 - dist / tailLen, 2.5);
+    }
+    drawLEDs(ctx, brightness);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// Modern Glow
+(function() {
+  const canvas = document.getElementById('canvas-modern');
+  const ctx = canvas.getContext('2d');
+  let pos = 0;
+  let dir = 1;
+  const speed = 0.05;
+
+  function frame() {
+    pos += speed * dir;
+    if (pos >= LEDS - 1) { pos = LEDS - 1; dir = -1; }
+    if (pos <= 0) { pos = 0; dir = 1; }
+
+    const brightness = new Array(LEDS).fill(0);
+    for (let i = 0; i < LEDS; i++) {
+      const dist = Math.abs(i - pos);
+      brightness[i] = Math.exp(-dist * dist / 8);
+    }
+    drawLEDs(ctx, brightness);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// Dual Scanner
+(function() {
+  const canvas = document.getElementById('canvas-dual');
+  const ctx = canvas.getContext('2d');
+  let pos1 = 0, dir1 = 1;
+  let pos2 = LEDS - 1, dir2 = -1;
+  const speed = 0.05;
+  const tailLen = 5;
+
+  function frame() {
+    pos1 += speed * dir1;
+    pos2 += speed * dir2;
+    if (pos1 >= LEDS - 1) { pos1 = LEDS - 1; dir1 = -1; }
+    if (pos1 <= 0) { pos1 = 0; dir1 = 1; }
+    if (pos2 >= LEDS - 1) { pos2 = LEDS - 1; dir2 = -1; }
+    if (pos2 <= 0) { pos2 = 0; dir2 = 1; }
+
+    const brightness = new Array(LEDS).fill(0);
+    for (let i = 0; i < LEDS; i++) {
+      const d1 = Math.abs(i - pos1);
+      const d2 = Math.abs(i - pos2);
+      const b1 = d1 < 1 ? 1.0 : d1 < tailLen ? Math.pow(1.0 - d1/tailLen, 2) : 0;
+      const b2 = d2 < 1 ? 1.0 : d2 < tailLen ? Math.pow(1.0 - d2/tailLen, 2) : 0;
+      brightness[i] = Math.min(1, b1 + b2);
+    }
+    drawLEDs(ctx, brightness);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// Pulse Scanner
+(function() {
+  const canvas = document.getElementById('canvas-pulse');
+  const ctx = canvas.getContext('2d');
+  let pos = 0;
+  let dir = 1;
+  const speed = 0.05;
+  let t = 0;
+
+  function frame() {
+    t += 0.05;
+    pos += speed * dir;
+    if (pos >= LEDS - 1) { pos = LEDS - 1; dir = -1; }
+    if (pos <= 0) { pos = 0; dir = 1; }
+
+    const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+    const brightness = new Array(LEDS).fill(0);
+    for (let i = 0; i < LEDS; i++) {
+      const dist = Math.abs(i - pos);
+      if (dist < 1) brightness[i] = pulse;
+      else if (dist < 6) brightness[i] = pulse * Math.pow(1.0 - dist / 6, 2);
+    }
+    drawLEDs(ctx, brightness);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
