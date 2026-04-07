@@ -1,27 +1,28 @@
 /**
- * Panda Status Custom Firmware V2.0
- * =================================
+ * Claude Rider Firmware V3.0
+ * ==========================
  * ESP32-C3-MINI | 25x WS2812 an GPIO5 | CH340K USB-Serial
  *
- * Fernstatus-Anzeige fuer Kalibrier-Operator.
- * Alle Animationen mit sanften Fades - kein hartes Blinken.
+ * Remote status display controlled via USB-Serial.
+ * All animations use smooth fades — no hard blinking.
  *
- * Kerntechnik: Doppelpuffer mit Interpolation.
- * Jeder Frame berechnet Ziel-Farben, das Fade-System interpoliert
- * sanft dorthin. Dadurch sind ALLE Zustandswechsel automatisch
- * weiche Uebergaenge.
+ * Core technique: Double-buffer with float interpolation.
+ * Each frame computes target colors; the fade system interpolates
+ * smoothly toward them. All state transitions are automatically
+ * soft crossfades.
  *
- * Protokoll (115200 Baud, Newline-terminiert):
- *   PING                -> PONG
- *   INFO                -> INFO:PANDA_CUSTOM,25,V2.1
- *   PROGRESS:<0-100>    -> OK     Gruener Fortschrittsbalken
- *   STATE:<zustand>     -> OK     IDLE|DONE|WAITING|ERROR|SAVE|CALIBRATED|CONNECT|OFF
- *   BRIGHTNESS:<0-255>  -> OK     Helligkeit (sanfter Uebergang)
- *   STATECOLOR:<st>,<r>,<g>,<b> -> OK  Farbe pro Zustand setzen
- *   FLIP:<0|1>          -> OK     LED-Richtung spiegeln
- *   TIMEOUT:<sekunden>  -> OK     Heartbeat-Timeout (0=aus)
- *   HEARTBEAT           -> OK     Watchdog zuruecksetzen
- *   CLEAR               -> OK     Alles aus
+ * Serial Protocol (115200 Baud, newline-terminated):
+ *   PING                          -> PONG
+ *   INFO                          -> INFO:CLAUDE_RIDER,25,V3.0
+ *   PROGRESS:<0-100>              -> OK     Progress bar
+ *   STATE:<state>                 -> OK     IDLE|KNIGHT_RIDER|DONE|WAITING|ERROR|SAVE|CONNECT|OFF
+ *   BRIGHTNESS:<0-255>            -> OK     Brightness (smooth transition)
+ *   SPEED:<1-5>                   -> OK     Knight Rider speed (1=slow, 5=fast)
+ *   STATECOLOR:<st>,<r>,<g>,<b>  -> OK     Set color per state
+ *   FLIP:<0|1>                    -> OK     Mirror LED direction
+ *   TIMEOUT:<seconds>             -> OK     Heartbeat timeout (0=off)
+ *   HEARTBEAT                     -> OK     Reset watchdog
+ *   CLEAR                         -> OK     All off
  */
 
 #include <Adafruit_NeoPixel.h>
@@ -34,105 +35,117 @@
 #define CMD_BUFFER_SIZE 64
 
 // === Firmware ===
-#define FW_VERSION      "2.1"
+#define FW_ID           "CLAUDE_RIDER"
+#define FW_VERSION      "3.0"
 #define FRAME_MS        16      // ~60fps
 
-// === Fade-Geschwindigkeiten ===
-#define FADE_NORMAL     0.08f   // Standard-Uebergang (~500ms)
-#define FADE_SLOW       0.03f   // Langsamer Uebergang (~1s)
-#define FADE_FAST       0.20f   // Schneller Uebergang (~200ms)
+// === Fade speeds ===
+#define FADE_NORMAL     0.08f   // Standard transition (~500ms)
+#define FADE_SLOW       0.03f   // Slow transition (~1s)
+#define FADE_FAST       0.20f   // Fast transition (~200ms)
+
+// === Knight Rider ===
+#define KNIGHT_TAIL_LEN 8
+
+// Speed table for SPEED:1-5
+const float knightSpeedTable[5] = { 0.06f, 0.12f, 0.18f, 0.25f, 0.35f };
 
 // === LED Strip ===
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // ============================================================
-//                        ZUSTAENDE
+//                        STATES
 // ============================================================
 
 enum State {
-  ST_OFF,           // LEDs aus
-  ST_IDLE,          // Standby: sanftes blaues Atmen
-  ST_PROGRESS,      // Scan: gruener Fortschrittsbalken
-  ST_DONE,          // Fertig: gruenes Atmen (naechstes Geraet!)
-  ST_WAITING,       // Warte: gelbes/amber Atmen (Eingabe noetig)
-  ST_ERROR,         // Fehler: rotes Atmen (zum PC gehen)
-  ST_SAVE,          // Speichern: weiss/gold Atmen (EEPROM schreibt)
-  ST_CALIBRATED,    // Komplett kalibriert: Regenbogen-Sweep (Belohnung)
-  ST_CONNECT,       // Handstueck erkannt: gruener Flash -> auto IDLE
-  ST_DISCONNECTED   // Verbindung verloren (Heartbeat-Timeout)
+  ST_OFF,           // LEDs off
+  ST_IDLE,          // Standby: soft blue breathing
+  ST_KNIGHT_RIDER,  // Classic KITT scanner animation
+  ST_PROGRESS,      // Scan: progress bar
+  ST_DONE,          // Finished: green breathing
+  ST_WAITING,       // Waiting: yellow/amber breathing
+  ST_ERROR,         // Error: red breathing (fast)
+  ST_SAVE,          // Saving: white/gold breathing
+  ST_CONNECT,       // Connected: green flash -> auto IDLE
+  ST_DISCONNECTED   // Connection lost (heartbeat timeout)
 };
 
 // ============================================================
-//                    DISPLAY-SYSTEM (Fade)
+//                    DISPLAY SYSTEM (Fade)
 //
-// Doppelpuffer: dispX[] = aktuell angezeigt, targX[] = Ziel.
-// Jeder Frame interpoliert disp sanft Richtung targ.
-// Dadurch automatisch weiche Uebergaenge bei JEDEM Wechsel.
+// Double-buffer: dispX[] = currently displayed, targX[] = target.
+// Each frame interpolates disp smoothly toward targ.
+// All state transitions are automatically soft crossfades.
 // ============================================================
 
 float dispR[NUM_LEDS], dispG[NUM_LEDS], dispB[NUM_LEDS];
 float targR[NUM_LEDS], targG[NUM_LEDS], targB[NUM_LEDS];
 
-// Helligkeit mit sanftem Uebergang
+// Brightness with smooth transition
 float currentBrightness = 60.0f;
 float targetBrightness  = 60.0f;
 
-// Aktuelle Fade-Geschwindigkeit (wird pro Zustand gesetzt)
+// Current fade speed (set per state)
 float fadeSpeed = FADE_NORMAL;
 
 // ============================================================
-//                     GLOBALE VARIABLEN
+//                     GLOBAL VARIABLES
 // ============================================================
 
 State currentState  = ST_IDLE;
 float smoothProgress = 0.0f;
 float targetProgress = 0.0f;
 
-unsigned long phase     = 0;    // Animations-Phasenzaehler
+unsigned long phase     = 0;    // Animation phase counter
 unsigned long lastFrame = 0;
 
-// Heartbeat-Watchdog
+// Heartbeat watchdog
 unsigned long lastHeartbeat    = 0;
-unsigned long heartbeatTimeout = 0;   // ms, 0 = deaktiviert
+unsigned long heartbeatTimeout = 0;   // ms, 0 = disabled
 State stateBeforeDisconnect    = ST_IDLE;
 
 // Button
 bool buttonPressed          = false;
 unsigned long buttonDebounce = 0;
 
-// Flash-Effekt (bei DONE- und CONNECT-Uebergang)
+// Flash effect (on DONE and CONNECT transition)
 bool flashActive         = false;
 unsigned long flashStart = 0;
 #define FLASH_DURATION   500   // ms
 
-// Connect-Flash (auto-Rueckkehr zu IDLE)
+// Connect flash (auto-return to IDLE)
 unsigned long connectStart = 0;
-#define CONNECT_DURATION 800   // ms bis auto-IDLE
+#define CONNECT_DURATION 800   // ms until auto-IDLE
 
-// LED-Richtung (Montage oben/unten am Monitor)
+// LED direction (mounting top/bottom)
 bool flipped = false;
 
+// Knight Rider position (float for smooth movement)
+float knightPos  = 0.0f;
+float knightDir  = 1.0f;
+float knightSpeed = 0.18f;   // Default speed (SPEED:3)
+
 // ============================================================
-//              STATE-FARBEN (konfigurierbar)
+//              STATE COLORS (configurable)
 //
-// Default-Farben pro Zustand. Aenderbar per STATECOLOR-Befehl.
-// Index = State-Enum (ST_OFF=0 ... ST_DISCONNECTED=9)
+// Default colors per state. Changeable via STATECOLOR command.
+// Index = State enum (ST_OFF=0 ... ST_DISCONNECTED=9)
 // ============================================================
 
-//                        OFF  IDLE  PROG  DONE  WAIT  ERR   SAVE       CALIB CONN  DISC
-uint8_t stR[] =         { 0,   0,    0,    0,    255,  255,  255,       0,    0,    255 };
-uint8_t stG[] =         { 0,   0,    120,  255,  160,  0,    220,       0,    255,  100 };
-uint8_t stB[] =         { 0,   50,   255,  0,    0,    0,    120,       0,    0,    0   };
+//                       OFF  IDLE  KR    PROG  DONE  WAIT  ERR  SAVE  CONN  DISC
+uint8_t stR[] =        { 0,   0,    255,  0,    0,    255,  255, 255,  0,    255 };
+uint8_t stG[] =        { 0,   0,    10,   120,  255,  160,  0,   220,  255,  100 };
+uint8_t stB[] =        { 0,   50,   0,    255,  0,    0,    0,   120,  0,    0   };
 
-// Seriell
+// Serial command buffer
 char cmdBuffer[CMD_BUFFER_SIZE];
 uint8_t cmdPos = 0;
 
-// Forward Declaration (wird von computeConnectTargets benoetigt)
+// Forward declaration (needed by computeConnectTargets)
 void changeState(State newState);
 
 // ============================================================
-//                     HILFSFUNKTIONEN
+//                     HELPER FUNCTIONS
 // ============================================================
 
 void setTarget(uint16_t i, float r, float g, float b) {
@@ -149,7 +162,7 @@ void setAllTargets(float r, float g, float b) {
   }
 }
 
-// Sinus-basiertes Atmen (Ergebnis: 0.0 - 1.0)
+// Sine-based breathing (result: 0.0 - 1.0)
 float breathe(float speed) {
   return (sin(phase * speed) + 1.0f) * 0.5f;
 }
@@ -165,17 +178,17 @@ float clampF(float v) {
 // ============================================================
 
 void updateDisplay() {
-  // Helligkeit sanft ueberblenden
+  // Smooth brightness transition
   currentBrightness += (targetBrightness - currentBrightness) * 0.05f;
   float brightScale = currentBrightness / 255.0f;
 
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    // Sanfte Interpolation zum Zielwert
+    // Smooth interpolation toward target
     dispR[i] += (targR[i] - dispR[i]) * fadeSpeed;
     dispG[i] += (targG[i] - dispG[i]) * fadeSpeed;
     dispB[i] += (targB[i] - dispB[i]) * fadeSpeed;
 
-    // Helligkeit anwenden und an Strip senden (mit Flip)
+    // Apply brightness and send to strip (with flip)
     uint8_t r = (uint8_t)clampF(dispR[i] * brightScale);
     uint8_t g = (uint8_t)clampF(dispG[i] * brightScale);
     uint8_t b = (uint8_t)clampF(dispB[i] * brightScale);
@@ -186,12 +199,12 @@ void updateDisplay() {
 }
 
 // ============================================================
-//                   ANIMATIONS-FUNKTIONEN
+//                   ANIMATION FUNCTIONS
 //
-// Berechnen nur ZIEL-Farben. Das Fade-System macht den Rest.
+// Only compute TARGET colors. The fade system does the rest.
 // ============================================================
 
-// Helper: Atmen mit konfigurierbarer Farbe aus stR/stG/stB
+// Helper: breathing with configurable color from stR/stG/stB
 void computeBreathingForState(State st, float speed, float minFrac) {
   fadeSpeed = FADE_NORMAL;
   float breath = breathe(speed);
@@ -199,30 +212,63 @@ void computeBreathingForState(State st, float speed, float minFrac) {
   setAllTargets(stR[st] * scale, stG[st] * scale, stB[st] * scale);
 }
 
-// --- IDLE: Sanftes Atmen (Default: Blau) ---
+// --- IDLE: Soft breathing (default: blue) ---
 void computeIdleTargets() {
   computeBreathingForState(ST_IDLE, 0.04f, 0.15f);
 }
 
-// --- PROGRESS: Gruener Fortschrittsbalken mit Glow ---
+// --- KNIGHT RIDER: Classic KITT scanner with exponential decay tail ---
+void computeKnightRiderTargets() {
+  fadeSpeed = FADE_FAST;
+
+  // Advance scanner position
+  knightPos += knightDir * knightSpeed;
+
+  // Bounce at ends
+  if (knightPos >= (float)(NUM_LEDS - 1)) {
+    knightPos = (float)(NUM_LEDS - 1);
+    knightDir = -1.0f;
+  } else if (knightPos <= 0.0f) {
+    knightPos = 0.0f;
+    knightDir = 1.0f;
+  }
+
+  float cR = stR[ST_KNIGHT_RIDER];
+  float cG = stG[ST_KNIGHT_RIDER];
+  float cB = stB[ST_KNIGHT_RIDER];
+
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    float dist = fabsf((float)i - knightPos);
+    float intensity = 0.0f;
+
+    if (dist < (float)KNIGHT_TAIL_LEN) {
+      // Exponential decay: bright head, fading tail
+      intensity = powf(2.5f, -(dist));
+    }
+
+    setTarget(i, cR * intensity, cG * intensity, cB * intensity);
+  }
+}
+
+// --- PROGRESS: Progress bar with glow ---
 void computeProgressTargets() {
   fadeSpeed = FADE_NORMAL;
 
-  // Sanfte Fortschritts-Interpolation
+  // Smooth progress interpolation
   smoothProgress += (targetProgress - smoothProgress) * 0.12f;
 
   float ledsToLight = smoothProgress * NUM_LEDS / 100.0f;
   uint16_t fullLeds = (uint16_t)ledsToLight;
   float partial = ledsToLight - (float)fullLeds;
 
-  // Dezenter Schimmer auf gefuelltem Bereich
+  // Subtle shimmer on filled area
   float shimmer = breathe(0.15f) * 0.12f;
 
   float cR = stR[ST_PROGRESS], cG = stG[ST_PROGRESS], cB = stB[ST_PROGRESS];
 
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     if (i < fullLeds) {
-      // Gefuellt: State-Farbe mit Positions-Gradient + Schimmer
+      // Filled: state color with position gradient + shimmer
       float posRatio = (float)i / (float)NUM_LEDS;
       float intensity = 0.7f + posRatio * 0.3f + shimmer;
       if (intensity > 1.0f) intensity = 1.0f;
@@ -237,7 +283,7 @@ void computeProgressTargets() {
   }
 }
 
-// --- DONE: Atmen (Default: Gruen, hell, aus der Ferne sichtbar) ---
+// --- DONE: Breathing (default: green, bright) ---
 void computeDoneTargets() {
   if (flashActive) {
     fadeSpeed = FADE_FAST;
@@ -257,17 +303,17 @@ void computeDoneTargets() {
   computeBreathingForState(ST_DONE, 0.05f, 0.14f);
 }
 
-// --- WAITING: Atmen (Default: Gelb/Amber) ---
+// --- WAITING: Breathing (default: yellow/amber) ---
 void computeWaitingTargets() {
   computeBreathingForState(ST_WAITING, 0.04f, 0.10f);
 }
 
-// --- ERROR: Atmen schneller (Default: Rot) ---
+// --- ERROR: Fast breathing (default: red) ---
 void computeErrorTargets() {
   computeBreathingForState(ST_ERROR, 0.07f, 0.05f);
 }
 
-// --- DISCONNECTED: Pulsieren auf mittleren LEDs (Default: Orange) ---
+// --- DISCONNECTED: Pulsing center LEDs (default: orange) ---
 void computeDisconnectedTargets() {
   fadeSpeed = FADE_SLOW;
   float breath = breathe(0.03f);
@@ -286,44 +332,12 @@ void computeDisconnectedTargets() {
   }
 }
 
-// --- SAVE: Atmen (Default: Weiss/Gold) ---
+// --- SAVE: Breathing (default: white/gold) ---
 void computeSaveTargets() {
   computeBreathingForState(ST_SAVE, 0.05f, 0.35f);
 }
 
-// --- CALIBRATED: Regenbogen-Sweep (Belohnungs-Animation) ---
-void computeCalibratedTargets() {
-  fadeSpeed = FADE_NORMAL;
-
-  // Regenbogen wandert langsam ueber die Leiste
-  float hueOffset = phase * 0.8f;  // Geschwindigkeit (~3s fuer einen Durchlauf)
-
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    // HSV -> RGB Konvertierung mit Position + Offset
-    float hue = fmod((float)i / NUM_LEDS * 360.0f + hueOffset, 360.0f);
-    float h = hue / 60.0f;
-    int hi = (int)h % 6;
-    float f = h - (int)h;
-
-    float v = 200.0f;  // Helligkeit
-    float p = 0.0f;
-    float q = v * (1.0f - f);
-    float t = v * f;
-
-    float r, g, b;
-    switch (hi) {
-      case 0: r = v; g = t; b = p; break;
-      case 1: r = q; g = v; b = p; break;
-      case 2: r = p; g = v; b = t; break;
-      case 3: r = p; g = q; b = v; break;
-      case 4: r = t; g = p; b = v; break;
-      default: r = v; g = p; b = q; break;
-    }
-    setTarget(i, r, g, b);
-  }
-}
-
-// --- CONNECT: Flash -> automatisch zurueck zu IDLE (Default: Gruen) ---
+// --- CONNECT: Flash -> automatically return to IDLE (default: green) ---
 void computeConnectTargets() {
   unsigned long elapsed = millis() - connectStart;
 
@@ -340,53 +354,59 @@ void computeConnectTargets() {
   }
 }
 
-// --- OFF: Alles dunkel ---
+// --- OFF: All dark ---
 void computeOffTargets() {
   fadeSpeed = FADE_SLOW;
   setAllTargets(0, 0, 0);
 }
 
 // ============================================================
-//                    ZUSTANDSWECHSEL
+//                    STATE TRANSITION
 // ============================================================
 
 void changeState(State newState) {
   if (newState == currentState) return;
 
-  // Flash-Effekt bei Uebergang zu DONE
+  // Flash effect on transition to DONE
   if (newState == ST_DONE) {
     flashActive = true;
     flashStart = millis();
   }
 
-  // Connect-Flash Timer starten
+  // Connect flash timer start
   if (newState == ST_CONNECT) {
     connectStart = millis();
   }
 
-  // Fortschritt zuruecksetzen bei neuem Scan
+  // Reset progress on new scan
   if (newState == ST_PROGRESS && currentState != ST_PROGRESS) {
     smoothProgress = 0.0f;
     targetProgress = 0.0f;
+  }
+
+  // Reset Knight Rider position on entry
+  if (newState == ST_KNIGHT_RIDER) {
+    knightPos = 0.0f;
+    knightDir = 1.0f;
   }
 
   currentState = newState;
 }
 
 // ============================================================
-//                   BEFEHLSVERARBEITUNG
+//                   COMMAND PROCESSING
 // ============================================================
 
 void processCommand(const char* cmd) {
-  // Jeder empfangene Befehl setzt den Heartbeat-Timer zurueck
+  // Any received command resets the heartbeat timer
   lastHeartbeat = millis();
 
-  // Bei Reconnect nach Disconnect: vorherigen Zustand wiederherstellen
+  // On reconnect after disconnect: restore previous state
   if (currentState == ST_DISCONNECTED) {
     changeState(stateBeforeDisconnect);
   }
 
-  // --- Befehle ohne Parameter ---
+  // --- Commands without parameters ---
 
   if (strcmp(cmd, "PING") == 0) {
     Serial.println("PONG");
@@ -394,7 +414,9 @@ void processCommand(const char* cmd) {
   }
 
   if (strcmp(cmd, "INFO") == 0) {
-    Serial.print("INFO:PANDA_CUSTOM,");
+    Serial.print("INFO:");
+    Serial.print(FW_ID);
+    Serial.print(",");
     Serial.print(NUM_LEDS);
     Serial.print(",V");
     Serial.println(FW_VERSION);
@@ -412,7 +434,7 @@ void processCommand(const char* cmd) {
     return;
   }
 
-  // --- Befehle mit Parameter (CMD:VALUE) ---
+  // --- Commands with parameter (CMD:VALUE) ---
 
   char* colon = strchr(cmd, ':');
   if (!colon) {
@@ -433,14 +455,14 @@ void processCommand(const char* cmd) {
     Serial.println("OK");
   }
   else if (strcmp(command, "STATE") == 0) {
-    if      (strcmp(value, "IDLE") == 0)       changeState(ST_IDLE);
-    else if (strcmp(value, "DONE") == 0)       changeState(ST_DONE);
-    else if (strcmp(value, "WAITING") == 0)    changeState(ST_WAITING);
-    else if (strcmp(value, "ERROR") == 0)      changeState(ST_ERROR);
-    else if (strcmp(value, "SAVE") == 0)       changeState(ST_SAVE);
-    else if (strcmp(value, "CALIBRATED") == 0) changeState(ST_CALIBRATED);
-    else if (strcmp(value, "CONNECT") == 0)    changeState(ST_CONNECT);
-    else if (strcmp(value, "OFF") == 0)        changeState(ST_OFF);
+    if      (strcmp(value, "IDLE") == 0)         changeState(ST_IDLE);
+    else if (strcmp(value, "KNIGHT_RIDER") == 0) changeState(ST_KNIGHT_RIDER);
+    else if (strcmp(value, "DONE") == 0)         changeState(ST_DONE);
+    else if (strcmp(value, "WAITING") == 0)      changeState(ST_WAITING);
+    else if (strcmp(value, "ERROR") == 0)        changeState(ST_ERROR);
+    else if (strcmp(value, "SAVE") == 0)         changeState(ST_SAVE);
+    else if (strcmp(value, "CONNECT") == 0)      changeState(ST_CONNECT);
+    else if (strcmp(value, "OFF") == 0)          changeState(ST_OFF);
     else {
       Serial.println("ERR:UNKNOWN_STATE");
       return;
@@ -449,6 +471,11 @@ void processCommand(const char* cmd) {
   }
   else if (strcmp(command, "BRIGHTNESS") == 0) {
     targetBrightness = (float)constrain(atoi(value), 0, 255);
+    Serial.println("OK");
+  }
+  else if (strcmp(command, "SPEED") == 0) {
+    int s = constrain(atoi(value), 1, 5);
+    knightSpeed = knightSpeedTable[s - 1];
     Serial.println("OK");
   }
   else if (strcmp(command, "TIMEOUT") == 0) {
@@ -471,14 +498,15 @@ void processCommand(const char* cmd) {
     if (!tok) { Serial.println("ERR:INVALID_ARGS"); return; }
 
     int si = -1;
-    if      (strcmp(tok, "IDLE") == 0)         si = ST_IDLE;
-    else if (strcmp(tok, "PROGRESS") == 0)     si = ST_PROGRESS;
-    else if (strcmp(tok, "DONE") == 0)         si = ST_DONE;
-    else if (strcmp(tok, "WAITING") == 0)      si = ST_WAITING;
-    else if (strcmp(tok, "ERROR") == 0)        si = ST_ERROR;
-    else if (strcmp(tok, "SAVE") == 0)         si = ST_SAVE;
-    else if (strcmp(tok, "CONNECT") == 0)      si = ST_CONNECT;
-    else if (strcmp(tok, "DISCONNECTED") == 0) si = ST_DISCONNECTED;
+    if      (strcmp(tok, "IDLE") == 0)          si = ST_IDLE;
+    else if (strcmp(tok, "KNIGHT_RIDER") == 0)  si = ST_KNIGHT_RIDER;
+    else if (strcmp(tok, "PROGRESS") == 0)      si = ST_PROGRESS;
+    else if (strcmp(tok, "DONE") == 0)          si = ST_DONE;
+    else if (strcmp(tok, "WAITING") == 0)       si = ST_WAITING;
+    else if (strcmp(tok, "ERROR") == 0)         si = ST_ERROR;
+    else if (strcmp(tok, "SAVE") == 0)          si = ST_SAVE;
+    else if (strcmp(tok, "CONNECT") == 0)       si = ST_CONNECT;
+    else if (strcmp(tok, "DISCONNECTED") == 0)  si = ST_DISCONNECTED;
 
     if (si < 0) { Serial.println("ERR:UNKNOWN_STATE"); return; }
 
@@ -506,13 +534,13 @@ void setup() {
   Serial.begin(SERIAL_BAUD);
 
   strip.begin();
-  strip.setBrightness(255);   // Helligkeit wird manuell skaliert
+  strip.setBrightness(255);   // Brightness is scaled manually
   strip.clear();
   strip.show();
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  // Display-Puffer initialisieren
+  // Initialize display buffers
   memset(dispR, 0, sizeof(dispR));
   memset(dispG, 0, sizeof(dispG));
   memset(dispB, 0, sizeof(dispB));
@@ -520,36 +548,66 @@ void setup() {
   memset(targG, 0, sizeof(targG));
   memset(targB, 0, sizeof(targB));
 
-  // Startup: sanfter Regenbogen-Sweep
-  for (uint16_t i = 0; i < NUM_LEDS; i++) {
-    uint16_t hue = i * 65536 / NUM_LEDS;
-    uint32_t color = strip.gamma32(strip.ColorHSV(hue, 255, (uint8_t)currentBrightness));
-    strip.setPixelColor(i, color);
+  // Startup animation: Knight Rider scan (one pass back and forth)
+  float pos = 0.0f;
+  float dir = 1.0f;
+  float startSpeed = 0.18f;
+  int passes = 0;
 
-    // Display-Puffer synchronisieren fuer sanften Uebergang danach
-    dispR[i] = (float)((color >> 16) & 0xFF);
-    dispG[i] = (float)((color >> 8) & 0xFF);
-    dispB[i] = (float)(color & 0xFF);
+  while (passes < 2) {
+    pos += dir * startSpeed;
 
+    if (pos >= (float)(NUM_LEDS - 1)) {
+      pos = (float)(NUM_LEDS - 1);
+      dir = -1.0f;
+      passes++;
+    } else if (pos <= 0.0f) {
+      pos = 0.0f;
+      dir = 1.0f;
+      if (passes > 0) passes++;
+    }
+
+    for (uint16_t i = 0; i < NUM_LEDS; i++) {
+      float dist = fabsf((float)i - pos);
+      float intensity = 0.0f;
+      if (dist < (float)KNIGHT_TAIL_LEN) {
+        intensity = powf(2.5f, -dist);
+      }
+      uint8_t r = (uint8_t)clampF(255.0f * intensity * (currentBrightness / 255.0f));
+      uint8_t g = (uint8_t)clampF(10.0f  * intensity * (currentBrightness / 255.0f));
+      uint8_t b = 0;
+      strip.setPixelColor(i, strip.Color(r, g, b));
+
+      // Sync display buffer for smooth transition afterward
+      dispR[i] = 255.0f * intensity;
+      dispG[i] = 10.0f  * intensity;
+      dispB[i] = 0.0f;
+    }
     strip.show();
-    delay(25);
+    delay(16);
   }
-  delay(400);
 
-  // Fade-System uebernimmt ab hier den Uebergang zu Idle
+  delay(200);
+
+  // Fade system takes over from here
   currentState = ST_IDLE;
   lastFrame = millis();
   lastHeartbeat = millis();
 
-  Serial.println("READY:PANDA_CUSTOM,25,V2.1");
+  Serial.print("READY:");
+  Serial.print(FW_ID);
+  Serial.print(",");
+  Serial.print(NUM_LEDS);
+  Serial.print(",V");
+  Serial.println(FW_VERSION);
 }
 
 // ============================================================
-//                       HAUPTSCHLEIFE
+//                       MAIN LOOP
 // ============================================================
 
 void loop() {
-  // === Serielle Befehle einlesen ===
+  // === Read serial commands ===
   while (Serial.available()) {
     char c = Serial.read();
     if (c == '\n' || c == '\r') {
@@ -563,7 +621,7 @@ void loop() {
     }
   }
 
-  // === Button: DONE/ERROR/WAITING quittieren -> IDLE ===
+  // === Button: acknowledge DONE/ERROR/WAITING -> IDLE ===
   bool btnState = digitalRead(BUTTON_PIN) == LOW;
   if (btnState && !buttonPressed && (millis() - buttonDebounce > 200)) {
     buttonPressed = true;
@@ -575,7 +633,7 @@ void loop() {
   }
   if (!btnState) buttonPressed = false;
 
-  // === Heartbeat-Watchdog ===
+  // === Heartbeat watchdog ===
   if (heartbeatTimeout > 0 &&
       currentState != ST_OFF &&
       currentState != ST_DISCONNECTED) {
@@ -585,26 +643,26 @@ void loop() {
     }
   }
 
-  // === Frame-Timing (60fps) ===
+  // === Frame timing (60fps) ===
   unsigned long now = millis();
   if (now - lastFrame < FRAME_MS) return;
   lastFrame = now;
   phase++;
 
-  // === Ziel-Farben berechnen (je nach Zustand) ===
+  // === Compute target colors (per state) ===
   switch (currentState) {
     case ST_IDLE:         computeIdleTargets();         break;
+    case ST_KNIGHT_RIDER: computeKnightRiderTargets();  break;
     case ST_PROGRESS:     computeProgressTargets();     break;
     case ST_DONE:         computeDoneTargets();         break;
     case ST_WAITING:      computeWaitingTargets();      break;
     case ST_ERROR:        computeErrorTargets();        break;
     case ST_SAVE:         computeSaveTargets();         break;
-    case ST_CALIBRATED:   computeCalibratedTargets();   break;
     case ST_CONNECT:      computeConnectTargets();      break;
     case ST_DISCONNECTED: computeDisconnectedTargets(); break;
     case ST_OFF:          computeOffTargets();          break;
   }
 
-  // === Sanftes Fade + Display-Update ===
+  // === Smooth fade + display update ===
   updateDisplay();
 }
