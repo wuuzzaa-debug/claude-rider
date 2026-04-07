@@ -17,7 +17,9 @@
  *   PROGRESS:<0-100>              -> OK     Progress bar
  *   STATE:<state>                 -> OK     IDLE|KNIGHT_RIDER|DONE|WAITING|ERROR|SAVE|CONNECT|OFF
  *   BRIGHTNESS:<0-255>            -> OK     Brightness (smooth transition)
- *   SPEED:<1-5>                   -> OK     Knight Rider speed (1=slow, 5=fast)
+ *   SPEED:<1-10>                  -> OK     Knight Rider speed (1=slow, 10=insane)
+ *   TAIL:<4-25>                   -> OK     Knight Rider tail length (LEDs)
+ *   GLOW:<0-100>                  -> OK     Knight Rider base glow (0=off, 100=full)
  *   STATECOLOR:<st>,<r>,<g>,<b>  -> OK     Set color per state
  *   FLIP:<0|1>                    -> OK     Mirror LED direction
  *   TIMEOUT:<seconds>             -> OK     Heartbeat timeout (0=off)
@@ -45,10 +47,13 @@
 #define FADE_FAST       0.20f   // Fast transition (~200ms)
 
 // === Knight Rider ===
-#define KNIGHT_TAIL_LEN 8
+#define KNIGHT_TAIL_DEFAULT 14
 
-// Speed table for SPEED:1-5
-const float knightSpeedTable[5] = { 0.06f, 0.12f, 0.18f, 0.25f, 0.35f };
+// Speed table for SPEED:1-10
+const float knightSpeedTable[10] = {
+  0.04f, 0.06f, 0.10f, 0.15f, 0.20f,   // 1-5: slow to normal
+  0.30f, 0.40f, 0.55f, 0.75f, 1.00f    // 6-10: fast to insane
+};
 
 // === LED Strip ===
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -124,6 +129,8 @@ bool flipped = false;
 float knightPos  = 0.0f;
 float knightDir  = 1.0f;
 float knightSpeed = 0.18f;   // Default speed (SPEED:3)
+int   knightTail  = KNIGHT_TAIL_DEFAULT;  // Tail length (configurable via TAIL command)
+float knightGlow  = 0.08f;               // Base glow (configurable via GLOW command)
 
 // ============================================================
 //              STATE COLORS (configurable)
@@ -237,13 +244,17 @@ void computeKnightRiderTargets() {
   float cG = stG[ST_KNIGHT_RIDER];
   float cB = stB[ST_KNIGHT_RIDER];
 
+  // Base glow: all LEDs always dim red (like original KITT)
+  float baseGlow = knightGlow;
+
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     float dist = fabsf((float)i - knightPos);
-    float intensity = 0.0f;
+    float intensity = baseGlow;
 
-    if (dist < (float)KNIGHT_TAIL_LEN) {
-      // Exponential decay: bright head, fading tail
-      intensity = powf(2.5f, -(dist));
+    if (dist < (float)knightTail) {
+      // Bright sweep on top of base glow
+      float sweep = powf(1.0f - dist / (float)knightTail, 2.0f);
+      intensity = baseGlow + (1.0f - baseGlow) * sweep;
     }
 
     setTarget(i, cR * intensity, cG * intensity, cB * intensity);
@@ -474,8 +485,17 @@ void processCommand(const char* cmd) {
     Serial.println("OK");
   }
   else if (strcmp(command, "SPEED") == 0) {
-    int s = constrain(atoi(value), 1, 5);
+    int s = constrain(atoi(value), 1, 10);
     knightSpeed = knightSpeedTable[s - 1];
+    Serial.println("OK");
+  }
+  else if (strcmp(command, "TAIL") == 0) {
+    knightTail = constrain(atoi(value), 4, 25);
+    Serial.println("OK");
+  }
+  else if (strcmp(command, "GLOW") == 0) {
+    int g = constrain(atoi(value), 0, 100);
+    knightGlow = (float)g / 100.0f;
     Serial.println("OK");
   }
   else if (strcmp(command, "TIMEOUT") == 0) {
@@ -570,8 +590,8 @@ void setup() {
     for (uint16_t i = 0; i < NUM_LEDS; i++) {
       float dist = fabsf((float)i - pos);
       float intensity = 0.0f;
-      if (dist < (float)KNIGHT_TAIL_LEN) {
-        intensity = powf(2.5f, -dist);
+      if (dist < (float)knightTail) {
+        intensity = powf(1.0f - dist / (float)knightTail, 2.0f);
       }
       uint8_t r = (uint8_t)clampF(255.0f * intensity * (currentBrightness / 255.0f));
       uint8_t g = (uint8_t)clampF(10.0f  * intensity * (currentBrightness / 255.0f));

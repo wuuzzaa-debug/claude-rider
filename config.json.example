@@ -7,7 +7,7 @@
         "baud": 115200
     },
 
-    "brightness": 80,
+    "brightness": 255,
     "flip": false,
     "knight_rider_speed": 3,
 

@@ -68,9 +68,11 @@ DEFAULT_CONFIG: dict = {
         "baud": 115200,
         "timeout": 1.0,
     },
-    "brightness": 80,
+    "brightness": 255,
     "flip": False,
-    "knight_rider_speed": 3,
+    "knight_rider_speed": 9,
+    "knight_rider_tail": 5,
+    "knight_rider_glow": 8,
     "heartbeat_interval": 4,
     "heartbeat_timeout": 15,
     "daemon": {
@@ -340,6 +342,8 @@ class ClaudeRiderDaemon:
         cfg = self._config
         self._serial.send(f"BRIGHTNESS:{cfg['brightness']}")
         self._serial.send(f"SPEED:{cfg['knight_rider_speed']}")
+        self._serial.send(f"TAIL:{cfg.get('knight_rider_tail', 5)}")
+        self._serial.send(f"GLOW:{cfg.get('knight_rider_glow', 8)}")
         flip_val = 1 if cfg.get("flip") else 0
         self._serial.send(f"FLIP:{flip_val}")
 
@@ -546,6 +550,7 @@ def main() -> None:
             print(f"Daemon status: {resp}")
         else:
             print("No daemon running.")
+            sys.exit(1)
         return
 
     # --daemon

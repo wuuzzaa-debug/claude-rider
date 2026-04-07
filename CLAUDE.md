@@ -45,12 +45,14 @@ INFO                           -> INFO:CLAUDE_RIDER,25,V3.0
 STATE:<state>                  -> OK
 PROGRESS:<0-100>               -> OK
 BRIGHTNESS:<0-255>             -> OK
-SPEED:<1-5>                    -> OK
-STATECOLOR:<st>,<r>,<g>,<b>   -> OK
-FLIP:<0|1>                     -> OK
-TIMEOUT:<seconds>              -> OK
-HEARTBEAT                      -> OK
-CLEAR                          -> OK
+SPEED:<1-10>                   -> OK     Knight Rider scan speed
+TAIL:<4-25>                    -> OK     Knight Rider tail length (LEDs)
+GLOW:<0-100>                   -> OK     Knight Rider base glow percent
+STATECOLOR:<st>,<r>,<g>,<b>   -> OK     Color per state
+FLIP:<0|1>                     -> OK     Mirror LED direction
+TIMEOUT:<seconds>              -> OK     Heartbeat timeout (0=off)
+HEARTBEAT                      -> OK     Reset watchdog
+CLEAR                          -> OK     All off
 ```
 
 ## LED States
