@@ -454,8 +454,15 @@ class ClaudeRiderDaemon:
             else:
                 cmd = map_event(self._config, event, value)
                 if cmd:
+                    # Cancel pending IDLE timer if new event comes in
+                    if hasattr(self, '_idle_timer') and self._idle_timer is not None:
+                        self._idle_timer.cancel()
+                        self._idle_timer = None
                     fw_resp = self._serial.send(cmd)
                     response = json.dumps({"status": "ok", "command": cmd, "response": fw_resp})
+                    # Auto-transition: DONE -> IDLE after 3 seconds
+                    if event == "task_done":
+                        self._schedule_idle(3.0)
                 else:
                     response = json.dumps({"status": "error", "message": f"Unknown event: {event}"})
 
@@ -472,6 +479,16 @@ class ClaudeRiderDaemon:
                 conn.close()
             except Exception:
                 pass
+
+    def _schedule_idle(self, delay: float) -> None:
+        """After *delay* seconds, switch to IDLE (unless another event came in)."""
+        if hasattr(self, '_idle_timer') and self._idle_timer is not None:
+            self._idle_timer.cancel()
+        def _go_idle():
+            self._serial.send("STATE:IDLE")
+        self._idle_timer = threading.Timer(delay, _go_idle)
+        self._idle_timer.daemon = True
+        self._idle_timer.start()
 
     def _heartbeat_loop(self) -> None:
         """Send HEARTBEAT to firmware periodically."""
