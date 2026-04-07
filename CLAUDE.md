@@ -1,24 +1,24 @@
 # Claude Rider
 
-## Projekt
-Open Source LED-Statusanzeige fuer Claude Code.
-BIGTREETECH Panda Status LED-Leiste (ESP32-C3, 25x WS2812) zeigt
-den Zustand von Claude Code durch Animationen — Knight Rider Scanner
-beim Denken, Farb-Animationen fuer verschiedene Zustaende.
+## Project
+Open source LED status indicator for Claude Code.
+BIGTREETECH Panda Status LED bar (ESP32-C3, 25x WS2812) shows
+Claude Code state through animations — Knight Rider scanner
+while thinking, color animations for different states.
 
 ## Hardware
 
-| Parameter       | Wert                           |
-|-----------------|--------------------------------|
-| MCU             | ESP32-C3-MINI (RISC-V)        |
-| LED Data Pin    | GPIO 5 (ueber RMT)            |
-| LED Typ         | WS2812 (GRB, 800kHz)          |
-| Anzahl LEDs     | 25                             |
-| Button          | GPIO 9 (aktiv LOW, Pullup)     |
-| USB-Serial      | CH340K                         |
-| Stromversorgung | USB-C, 5V 3A                   |
+| Parameter    | Value                          |
+|--------------|--------------------------------|
+| MCU          | ESP32-C3-MINI (RISC-V)        |
+| LED Data Pin | GPIO 5 (via RMT)              |
+| LED Type     | WS2812 (GRB, 800kHz)          |
+| LED Count    | 25                             |
+| Button       | GPIO 9 (active LOW, pullup)    |
+| USB-Serial   | CH340K                         |
+| Power        | USB-C, 5V 3A                   |
 
-## Projektstruktur
+## Project Structure
 
 ```
 claude-rider/
@@ -37,34 +37,35 @@ claude-rider/
 └── stop_claude_rider.bat
 ```
 
-## Serielles Protokoll (115200 Baud)
+## Serial Protocol (115200 Baud)
 
 ```
 PING                           -> PONG
 INFO                           -> INFO:CLAUDE_RIDER,25,V3.0
-STATE:<zustand>                -> OK
+STATE:<state>                  -> OK
 PROGRESS:<0-100>               -> OK
 BRIGHTNESS:<0-255>             -> OK
 SPEED:<1-5>                    -> OK
 STATECOLOR:<st>,<r>,<g>,<b>   -> OK
 FLIP:<0|1>                     -> OK
-TIMEOUT:<sekunden>             -> OK
+TIMEOUT:<seconds>              -> OK
 HEARTBEAT                      -> OK
 CLEAR                          -> OK
 ```
 
-## LED-Zustaende
+## LED States
 
-| Zustand      | Farbe      | Animation               | Bedeutung               |
-|--------------|------------|-------------------------|-------------------------|
-| KNIGHT_RIDER | Rot        | KITT Scanner (aggressiv) | Claude denkt / arbeitet |
-| IDLE         | Blau       | Sanftes Atmen           | System bereit           |
-| WAITING      | Amber/Gelb | Pulsieren               | Input noetig            |
-| ERROR        | Rot        | Schnelles Atmen         | Fehler aufgetreten      |
-| DONE         | Gruen      | Flash + Atmen           | Task abgeschlossen      |
-| PROGRESS     | Cyan       | Fortschrittsbalken      | Langer Task             |
+| State        | Color      | Animation              | Meaning                |
+|--------------|------------|------------------------|------------------------|
+| KNIGHT_RIDER | Red        | KITT scanner (fast)    | Claude thinking/working|
+| IDLE         | Blue       | Soft breathing         | System ready           |
+| WAITING      | Amber      | Pulsing                | Input needed           |
+| ERROR        | Red        | Fast breathing         | Error occurred         |
+| DONE         | Green      | Flash + breathing      | Task completed         |
+| PROGRESS     | Cyan       | Progress bar           | Long running task      |
 
-## Konventionen
-- Framework: Arduino + Adafruit NeoPixel (Firmware)
-- Python: pyserial, keine weiteren Abhaengigkeiten
+## Conventions
+- Language: English
+- Framework: Arduino + Adafruit NeoPixel (firmware)
+- Python: pyserial, no other dependencies
 - Tests: pytest

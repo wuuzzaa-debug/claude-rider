@@ -5,55 +5,55 @@ title Claude Rider Setup
 echo.
 echo  ========================================
 echo           CLAUDE RIDER v3.0
-echo     LED Status fuer Claude Code
+echo     LED Status for Claude Code
 echo  ========================================
 echo.
 
-:: Python pruefen
+:: Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [FEHLER] Python nicht gefunden. Bitte installieren: https://python.org
+    echo [ERROR] Python not found. Please install: https://python.org
     pause
     exit /b 1
 )
 
-:: pyserial installieren falls noetig
+:: Install pyserial if needed
 python -c "import serial" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Installiere pyserial...
+    echo [INFO] Installing pyserial...
     pip install pyserial
     if errorlevel 1 (
-        echo [FEHLER] pyserial konnte nicht installiert werden.
+        echo [ERROR] Could not install pyserial.
         pause
         exit /b 1
     )
-    echo [OK] pyserial installiert.
+    echo [OK] pyserial installed.
 )
 
-:: Pruefen ob Daemon schon laeuft
+:: Check if daemon is already running
 python "%~dp0python\claude_rider.py" --status >nul 2>&1
 if not errorlevel 1 (
-    echo [INFO] Claude Rider Daemon laeuft bereits.
+    echo [INFO] Claude Rider daemon is already running.
     python "%~dp0python\claude_rider.py" --status
     pause
     exit /b 0
 )
 
-:: Daemon starten
-echo [INFO] Starte Claude Rider Daemon...
+:: Start daemon
+echo [INFO] Starting Claude Rider daemon...
 start /b "" python "%~dp0python\claude_rider.py" --daemon
 timeout /t 3 /nobreak >nul
 
-:: Pruefen ob Daemon gestartet ist
+:: Verify daemon started
 python "%~dp0python\claude_rider.py" --status
 if errorlevel 1 (
-    echo [FEHLER] Daemon konnte nicht gestartet werden.
-    echo          Ist die LED-Leiste per USB angeschlossen?
+    echo [ERROR] Could not start daemon.
+    echo         Is the LED bar connected via USB?
     pause
     exit /b 1
 )
 
 echo.
-echo [OK] Claude Rider laeuft!
+echo [OK] Claude Rider is running!
 echo.
 pause
