@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# Config (user-specific)
+config.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Rider Daemon
+.claude_rider.lock
+
+# Superpowers (brainstorming artifacts)
+.superpowers/

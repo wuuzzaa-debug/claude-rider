@@ -1,102 +1,70 @@
-# Panda Status Custom LED Controller
+# Claude Rider
 
 ## Projekt
-Custom Firmware (V2.1) fuer die BIGTREETECH Panda Status LED-Leiste.
-Fernstatus-Anzeige fuer Kalibrier-Operator — gesteuert ueber USB-Serial
-von der Wellcomet Kalibriersoftware (Python/PyQt5).
+Open Source LED-Statusanzeige fuer Claude Code.
+BIGTREETECH Panda Status LED-Leiste (ESP32-C3, 25x WS2812) zeigt
+den Zustand von Claude Code durch Animationen — Knight Rider Scanner
+beim Denken, Farb-Animationen fuer verschiedene Zustaende.
 
-Alle Animationen mit sanften Fades (Doppelpuffer mit Interpolation).
+## Hardware
 
-## Hardware (durch Firmware Reverse Engineering ermittelt)
-
-| Parameter       | Wert                          |
-|-----------------|-------------------------------|
+| Parameter       | Wert                           |
+|-----------------|--------------------------------|
 | MCU             | ESP32-C3-MINI (RISC-V)        |
-| LED Data Pin    | **GPIO 5** (ueber RMT)        |
+| LED Data Pin    | GPIO 5 (ueber RMT)            |
 | LED Typ         | WS2812 (GRB, 800kHz)          |
-| Anzahl LEDs     | **25**                         |
-| Button          | **GPIO 9** (aktiv LOW, Pullup) |
+| Anzahl LEDs     | 25                             |
+| Button          | GPIO 9 (aktiv LOW, Pullup)     |
 | USB-Serial      | CH340K                         |
-| Audio Codec     | ES8311 (I2C/I2S, Mikrofon)     |
 | Stromversorgung | USB-C, 5V 3A                   |
 
 ## Projektstruktur
 
 ```
-Status LED Leiste Pandastatus/
-├── CLAUDE.md                              # Diese Datei
-├── PROTOKOLL_V2.md                        # Detailliertes Protokoll-Dokument
-├── ANLEITUNG.md                           # Schritt-fuer-Schritt Anleitung
-├── panda_status_v1.0.2.bin                # Original BTT Firmware (Backup)
+claude-rider/
+├── README.md
+├── CLAUDE.md
+├── LICENSE
+├── config.json.example
 ├── firmware/
-│   ├── platformio.ini                     # PlatformIO Build-Konfiguration
-│   ├── src/
-│   │   └── main.cpp                       # Custom Firmware V2.1
-│   └── panda_custom/
-│       └── panda_custom.ino               # V1.0 (veraltet, Backup)
+│   ├── platformio.ini
+│   └── src/
+│       └── main.cpp
 ├── python/
-│   ├── panda_led_controller.py            # Python LED Controller V2.1
-│   └── integration_beispiel.py            # Integration in Kalibriersoftware
-└── archiv/                                # Backups (V1 Firmware + Controller)
+│   ├── claude_rider.py
+│   └── test_claude_rider.py
+├── start_claude_rider.bat
+└── stop_claude_rider.bat
 ```
 
-## Status
-- Firmware V2.1 mit Fade-System (Doppelpuffer-Interpolation, 60fps)
-- 10 Zustaende inkl. SAVE, CALIBRATED, CONNECT
-- Konfigurierbare Farben pro Zustand (STATECOLOR-Befehl)
-- LED-Richtung spiegelbar (FLIP) fuer Montage oben/unten
-- Heartbeat-Watchdog fuer Verbindungsueberwachung
-- V1.0 erfolgreich gebaut und geflasht (PlatformIO, ESP32-C3)
-- Build V1: 4.3% RAM, 20.9% Flash
-
-## Serielles Protokoll V2.1 (115200 Baud)
+## Serielles Protokoll (115200 Baud)
 
 ```
 PING                           -> PONG
-INFO                           -> INFO:PANDA_CUSTOM,25,V2.1
-PROGRESS:<0-100>               -> OK    Fortschrittsbalken (Default: Hellblau)
-STATE:<zustand>                -> OK    IDLE|DONE|WAITING|ERROR|SAVE|CALIBRATED|CONNECT|OFF
-BRIGHTNESS:<0-255>             -> OK    Helligkeit (sanfter Uebergang)
-STATECOLOR:<st>,<r>,<g>,<b>   -> OK    Farbe pro Zustand setzen
-FLIP:<0|1>                     -> OK    LED-Richtung spiegeln
-TIMEOUT:<sekunden>             -> OK    Heartbeat-Timeout (0=aus)
-HEARTBEAT                      -> OK    Watchdog zuruecksetzen
-CLEAR                          -> OK    Alles aus
+INFO                           -> INFO:CLAUDE_RIDER,25,V3.0
+STATE:<zustand>                -> OK
+PROGRESS:<0-100>               -> OK
+BRIGHTNESS:<0-255>             -> OK
+SPEED:<1-5>                    -> OK
+STATECOLOR:<st>,<r>,<g>,<b>   -> OK
+FLIP:<0|1>                     -> OK
+TIMEOUT:<sekunden>             -> OK
+HEARTBEAT                      -> OK
+CLEAR                          -> OK
 ```
 
-Detaillierte Protokoll-Dokumentation: siehe `PROTOKOLL_V2.md`
+## LED-Zustaende
 
-## LED-Zustaende (Operator-Sicht)
-
-| Zustand | Farbe | Animation | Bedeutung |
-|---------|-------|-----------|-----------|
-| IDLE | Blau | Atmen (gedimmt) | System bereit |
-| PROGRESS | Hellblau/Cyan | Balken fuellt sich | Scan laeuft |
-| DONE | Gruen | Atmen (hell) | Fertig, naechstes Geraet |
-| WAITING | Gelb/Amber | Atmen | Eingabe am PC noetig |
-| ERROR | Rot | Atmen (schnell) | Fehler aufgetreten |
-| SAVE | Weiss/Gold | Atmen | EEPROM wird geschrieben |
-| CALIBRATED | Regenbogen | Sweep | Komplett kalibriert! |
-| CONNECT | Gruen | Flash → auto IDLE | Handstueck erkannt |
-| DISCONNECTED | Orange | Mitte pulsiert | Verbindung verloren |
-
-## Flashen
-
-```bash
-# Bootloader-Modus: Button (GPIO9) halten + USB einstecken
-# Flash mit PlatformIO: pio run -t upload
-```
-
-## Verwandte Projekte
-
-- Kalibriersoftware: `J:\Liquidbeam\10_WELLCOMET\Labview Kallibriersoftware Python\Python_Calibration_Software\`
-  - Hauptdatei: `main.py` (PyQt5, 7060 Zeilen)
-  - Signal `scan_progress(current, total, text)` fuer LED-Fortschritt nutzen
-  - Signal `scan_finished(dict)` / `scan_error(str)` fuer Zustandswechsel
-  - Settings: `settings.json` — `led_settings` Block fuer Helligkeit/Port/Flip/Farben
+| Zustand      | Farbe      | Animation               | Bedeutung               |
+|--------------|------------|-------------------------|-------------------------|
+| KNIGHT_RIDER | Rot        | KITT Scanner (aggressiv) | Claude denkt / arbeitet |
+| IDLE         | Blau       | Sanftes Atmen           | System bereit           |
+| WAITING      | Amber/Gelb | Pulsieren               | Input noetig            |
+| ERROR        | Rot        | Schnelles Atmen         | Fehler aufgetreten      |
+| DONE         | Gruen      | Flash + Atmen           | Task abgeschlossen      |
+| PROGRESS     | Cyan       | Fortschrittsbalken      | Langer Task             |
 
 ## Konventionen
-- Sprache: Deutsch (Code-Kommentare duerfen Englisch sein)
-- Framework: Arduino + Adafruit NeoPixel (Custom Firmware)
-- Python: pyserial fuer Kommunikation
-- Immer Backup vor Firmware-Flash
+- Framework: Arduino + Adafruit NeoPixel (Firmware)
+- Python: pyserial, keine weiteren Abhaengigkeiten
+- Tests: pytest
