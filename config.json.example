@@ -4,43 +4,31 @@
 
     "serial": {
         "port": "auto",
-        "baud": 115200,
-        "timeout": 1.0
+        "baud": 115200
     },
 
-    "brightness": 60,
+    "brightness": 80,
     "flip": false,
     "knight_rider_speed": 3,
 
-    "heartbeat_interval": 4,
-    "heartbeat_timeout": 15,
-
-    "daemon": {
-        "host": "127.0.0.1",
-        "port": 17177
-    },
-
     "events": {
-        "thinking":    "STATE:KNIGHT_RIDER",
-        "progress":    "PROGRESS:{value}",
-        "done":        "STATE:DONE",
-        "waiting":     "STATE:WAITING",
-        "error":       "STATE:ERROR",
-        "saving":      "STATE:SAVE",
-        "connected":   "STATE:CONNECT",
-        "idle":        "STATE:IDLE",
-        "off":         "STATE:OFF"
+        "session_start":  "STATE:CONNECT",
+        "thinking":       "STATE:KNIGHT_RIDER",
+        "tool_pending":   "STATE:WAITING",
+        "tool_running":   "STATE:KNIGHT_RIDER",
+        "error":          "STATE:ERROR",
+        "task_done":      "STATE:DONE",
+        "idle":           "STATE:IDLE",
+        "waiting":        "STATE:WAITING",
+        "progress":       "PROGRESS:{value}"
     },
 
     "colors": {
-        "idle":          [0, 0, 50],
-        "knight_rider":  [255, 10, 0],
-        "progress":      [0, 120, 255],
-        "done":          [0, 255, 0],
-        "waiting":       [255, 160, 0],
-        "error":         [255, 0, 0],
-        "save":          [255, 220, 120],
-        "connect":       [0, 255, 0],
-        "disconnected":  [255, 100, 0]
+        "KNIGHT_RIDER":  [255, 10, 0],
+        "IDLE":          [0, 0, 50],
+        "WAITING":       [255, 160, 0],
+        "ERROR":         [255, 0, 0],
+        "DONE":          [0, 255, 0],
+        "PROGRESS":      [0, 120, 255]
     }
 }

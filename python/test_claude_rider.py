@@ -60,16 +60,19 @@ class TestDefaultConfig:
         events = DEFAULT_CONFIG["events"]
         assert "thinking" in events
         assert "progress" in events
-        assert "done" in events
+        assert "task_done" in events
         assert "error" in events
         assert "idle" in events
+        assert "session_start" in events
+        assert "tool_pending" in events
+        assert "tool_running" in events
 
     def test_default_config_has_colors(self):
         assert "colors" in DEFAULT_CONFIG
         colors = DEFAULT_CONFIG["colors"]
-        assert "idle" in colors
-        assert "knight_rider" in colors
-        assert "error" in colors
+        assert "IDLE" in colors
+        assert "KNIGHT_RIDER" in colors
+        assert "ERROR" in colors
         for name, rgb in colors.items():
             assert len(rgb) == 3, f"Color {name} must be [r, g, b]"
 
@@ -147,17 +150,25 @@ class TestEventMapping:
         cfg = load_config()
         assert map_event(cfg, "error") == "STATE:ERROR"
 
-    def test_done_maps_to_state_done(self):
+    def test_task_done_maps_to_state_done(self):
         cfg = load_config()
-        assert map_event(cfg, "done") == "STATE:DONE"
+        assert map_event(cfg, "task_done") == "STATE:DONE"
 
     def test_idle_maps_to_state_idle(self):
         cfg = load_config()
         assert map_event(cfg, "idle") == "STATE:IDLE"
 
-    def test_off_maps_to_state_off(self):
+    def test_session_start_maps_to_connect(self):
         cfg = load_config()
-        assert map_event(cfg, "off") == "STATE:OFF"
+        assert map_event(cfg, "session_start") == "STATE:CONNECT"
+
+    def test_tool_pending_maps_to_waiting(self):
+        cfg = load_config()
+        assert map_event(cfg, "tool_pending") == "STATE:WAITING"
+
+    def test_tool_running_maps_to_knight_rider(self):
+        cfg = load_config()
+        assert map_event(cfg, "tool_running") == "STATE:KNIGHT_RIDER"
 
     def test_event_mapping_with_value(self):
         cfg = load_config()
