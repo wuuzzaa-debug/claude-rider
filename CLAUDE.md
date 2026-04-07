@@ -63,11 +63,26 @@ CLEAR                          -> OK     All off
 | IDLE         | Blue       | Soft breathing         | System ready           |
 | WAITING      | Amber      | Pulsing                | Input needed           |
 | ERROR        | Red        | Fast breathing         | Error occurred         |
-| DONE         | Green      | Flash + breathing      | Task completed         |
+| DONE         | Green      | Flash + breathing      | Task completed (auto→IDLE after 3s) |
 | PROGRESS     | Cyan       | Progress bar           | Long running task      |
+
+## Claude Code Hook Mapping
+
+| Hook                | Event          | LED State    |
+|---------------------|----------------|--------------|
+| UserPromptSubmit    | thinking       | KNIGHT_RIDER |
+| PreToolUse          | tool_pending   | WAITING      |
+| PostToolUse         | tool_running   | KNIGHT_RIDER |
+| PostToolUseFailure  | error          | ERROR        |
+| Stop                | task_done      | DONE → IDLE  |
+| Notification(idle)  | idle           | IDLE         |
+| Notification(perm)  | waiting        | WAITING      |
+| SessionStart        | session_start  | CONNECT      |
 
 ## Conventions
 - Language: English
 - Framework: Arduino + Adafruit NeoPixel (firmware)
 - Python: pyserial, no other dependencies
 - Tests: pytest
+- Daemon communicates via TCP socket on 127.0.0.1:17177
+- Port detection: PING/PONG protocol scan (not CH340 name matching)
