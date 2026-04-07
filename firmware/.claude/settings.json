@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"J:/Liquidbeam/10_WELLCOMET/Status LED Leiste Pandastatus/firmware/src\")",
+      "Bash(cp \"J:/Liquidbeam/10_WELLCOMET/Status LED Leiste Pandastatus/firmware/panda_custom/panda_custom.ino\" \"J:/Liquidbeam/10_WELLCOMET/Status LED Leiste Pandastatus/firmware/src/main.cpp\")",
+      "Read(//j/Liquidbeam/10_WELLCOMET/Status LED Leiste Pandastatus/**)",
+      "Read(//j/Liquidbeam/10_WELLCOMET/Labview Kallibriersoftware Python/Python_Calibration_Software/**)",
+      "Bash(ls .pio/build/esp32c3/*.bin)"
+    ],
+    "additionalDirectories": [
+      "J:\\Liquidbeam\\10_WELLCOMET\\Status LED Leiste Pandastatus"
+    ]
+  }
+}
