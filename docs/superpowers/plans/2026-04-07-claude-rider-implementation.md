@@ -70,7 +70,7 @@ Datei `LICENSE` mit folgendem Inhalt erstellen:
 ```
 MIT License
 
-Copyright (c) 2026 Dietrich Frank
+Copyright (c) 2026 Claude Rider Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -2,7 +2,7 @@
 
 **Datum:** 2026-04-07
 **Status:** Entwurf
-**Autor:** Dietrich Frank + Claude
+**Autor:** Claude Rider Team
 
 ## Zusammenfassung
 
