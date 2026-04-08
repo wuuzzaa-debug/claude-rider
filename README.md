@@ -1,5 +1,7 @@
 # Claude Rider
 
+![Claude Rider Demo](demo.gif)
+
 > Knight Rider meets Claude Code — a physical LED status indicator
 > for your AI coding assistant.
 
