@@ -19,3 +19,13 @@ Thumbs.db
 
 # Superpowers (brainstorming artifacts)
 .superpowers/
+
+# Internal docs (may contain local paths)
+docs/superpowers/
+
+# Claude settings (user-specific)
+.claude/
+firmware/.claude/
+
+# Original video (too large for git)
+Claude Rider Video Clip.gif

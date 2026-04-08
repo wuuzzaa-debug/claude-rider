@@ -19,7 +19,7 @@ that shows you at a glance what Claude Code is doing:
 You need a **BIGTREETECH Panda Status LED bar**:
 
 - **Buy here:** https://biqu.equipment/products/biqu-panda-status-magnetic-mount-customizable-rgb
-- ~15 EUR / ~15 USD
+- ~25 USD
 - ESP32-C3-MINI microcontroller (RISC-V)
 - 25x WS2812 RGB LEDs
 - USB-C connection
